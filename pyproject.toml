@@ -1,0 +1,14 @@
+[project]
+name = "s7ragchromesearch"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "asyncio>=3.4.3",
+    "fastapi>=0.115.12",
+    "google-genai>=1.12.1",
+    "mcp[cli]>=1.6.0",
+    "pillow>=11.2.1",
+    "python-dotenv>=1.1.0",
+]
