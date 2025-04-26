@@ -1,9 +1,13 @@
 # basic import 
+import hashlib
+import json
+from markitdown import MarkItDown
 from mcp.server.fastmcp import FastMCP, Image
 from mcp.server.fastmcp.prompts import base
 from mcp.types import TextContent
 from mcp.server import Server
 from starlette.routing import Mount, Route
+import tqdm
 import uvicorn
 from mcp import types
 from PIL import Image as PILImage
@@ -13,10 +17,16 @@ import time
 import subprocess
 from rich.console import Console
 from rich.panel import Panel
-from fastapi import FastAPI, Request
+import requests
+from fastapi import FastAPI, Request, Body
 from contextlib import asynccontextmanager
 from starlette.applications import Starlette
 from mcp.server.sse import SseServerTransport
+from starlette.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+import numpy as np
+from pathlib import Path
+import faiss
 
 from data_model import (
     AddInput, AddListInput, AddListOutput, AddOutput, CreateThumbnailInput, OpenKeynoteOutput, SubtractInput, SubtractOutput,
@@ -38,6 +48,74 @@ console = Console()
 mcp = FastMCP("Calculator", settings= {"host": "127.0.0.1", "port": 7172})
 
 app = FastAPI()
+
+EMBED_URL = "http://localhost:11434/api/embeddings"
+EMBED_MODEL = "nomic-embed-text"
+CHUNK_SIZE = 256
+CHUNK_OVERLAP = 40
+ROOT = Path(__file__).parent.resolve()
+
+# Add CORS middleware to allow requests from Chrome extension
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, you should specify exact origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Define query request model
+class QueryRequest(BaseModel):
+    query: str
+
+# Define page request model
+class PageRequest(BaseModel):
+    url: str
+    title: str
+    html: str
+
+# New endpoint to handle queries from Chrome extension
+@app.post("/api/query")
+async def handle_query(request: QueryRequest):
+    query = request.query
+    print(f"Received query: {query}")
+    
+    # Use the AgentService to process the query
+    try:
+        from agent_service import agent_service
+        
+        # Process the query using our agent service
+        result = await agent_service.process_query(query)
+        return {"result": result}
+    
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"Error processing query: {e}")
+        return {"result": f"Error processing query: {str(e)}"}
+
+# New endpoint to handle page content from Chrome extension
+@app.post("/api/add-page")
+async def add_page(request: PageRequest):
+    print(f"Received page: {request.url}")
+    
+    try:
+        # Process the HTML content
+        chunks_processed = process_html(request.url, request.title, request.html)
+        
+        return {
+            "message": f"Page added successfully! Processed {chunks_processed} chunks.",
+            "status": "success"
+        }
+    
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"Error processing page: {e}")
+        return {
+            "message": f"Error processing page: {str(e)}",
+            "status": "error"
+        }
 
 # DEFINE TOOLS
 
@@ -354,6 +432,232 @@ def read_root():
 async def get_capabilites():
     return await mcp.list_tools()
 
+def get_embedding(text: str) -> np.ndarray:
+    response = requests.post(EMBED_URL, json={"model": EMBED_MODEL, "prompt": text})
+    response.raise_for_status()
+    return np.array(response.json()["embedding"], dtype=np.float32)
+
+def chunk_text(text, size=CHUNK_SIZE, overlap=CHUNK_OVERLAP):
+    words = text.split()
+    for i in range(0, len(words), size - overlap):
+        yield " ".join(words[i:i+size])
+
+def mcp_log(level: str, message: str) -> None:
+    """Log a message to stderr to avoid interfering with JSON communication"""
+    sys.stderr.write(f"{level}: {message}\n")
+    sys.stderr.flush()
+
+def process_documents():
+    """Process documents and create FAISS index"""
+    mcp_log("INFO", "Indexing documents with MarkItDown...")
+    ROOT = Path(__file__).parent.resolve()
+    DOC_PATH = ROOT / "documents"
+    INDEX_CACHE = ROOT / "faiss_index"
+    INDEX_CACHE.mkdir(exist_ok=True)
+    INDEX_FILE = INDEX_CACHE / "index.bin"
+    METADATA_FILE = INDEX_CACHE / "metadata.json"
+    CACHE_FILE = INDEX_CACHE / "doc_index_cache.json"
+
+    def file_hash(path):
+        return hashlib.md5(Path(path).read_bytes()).hexdigest()
+
+    CACHE_META = json.loads(CACHE_FILE.read_text()) if CACHE_FILE.exists() else {}
+    metadata = json.loads(METADATA_FILE.read_text()) if METADATA_FILE.exists() else []
+    index = faiss.read_index(str(INDEX_FILE)) if INDEX_FILE.exists() else None
+    all_embeddings = []
+    converter = MarkItDown()
+
+    for file in DOC_PATH.glob("*.*"):
+        fhash = file_hash(file)
+        if file.name in CACHE_META and CACHE_META[file.name] == fhash:
+            mcp_log("SKIP", f"Skipping unchanged file: {file.name}")
+            continue
+
+        mcp_log("PROC", f"Processing: {file.name}")
+        try:
+            result = converter.convert(str(file))
+            markdown = result.text_content
+            chunks = list(chunk_text(markdown))
+            embeddings_for_file = []
+            new_metadata = []
+            for i, chunk in enumerate(tqdm(chunks, desc=f"Embedding {file.name}")):
+                embedding = get_embedding(chunk)
+                embeddings_for_file.append(embedding)
+                new_metadata.append({"doc": file.name, "chunk": chunk, "chunk_id": f"{file.stem}_{i}"})
+            if embeddings_for_file:
+                if index is None:
+                    dim = len(embeddings_for_file[0])
+                    index = faiss.IndexFlatL2(dim)
+                index.add(np.stack(embeddings_for_file))
+                metadata.extend(new_metadata)
+            CACHE_META[file.name] = fhash
+        except Exception as e:
+            mcp_log("ERROR", f"Failed to process {file.name}: {e}")
+
+    CACHE_FILE.write_text(json.dumps(CACHE_META, indent=2))
+    METADATA_FILE.write_text(json.dumps(metadata, indent=2))
+    if index and index.ntotal > 0:
+        faiss.write_index(index, str(INDEX_FILE))
+        mcp_log("SUCCESS", "Saved FAISS index and metadata")
+    else:
+        mcp_log("WARN", "No new documents or updates to process.")
+
+def process_html(url, title, html_content):
+    """Process HTML content from a webpage and add to FAISS index"""
+    mcp_log("INFO", f"Processing HTML from: {url}")
+    
+    # Setup paths and files
+    ROOT = Path(__file__).parent.resolve()
+    INDEX_CACHE = ROOT / "faiss_index"
+    INDEX_CACHE.mkdir(exist_ok=True)
+    INDEX_FILE = INDEX_CACHE / "index.bin"
+    METADATA_FILE = INDEX_CACHE / "metadata.json"
+    CACHE_FILE = INDEX_CACHE / "doc_index_cache.json"
+    
+    # Create a URL-safe filename
+    safe_url = url.replace("://", "_").replace("/", "_").replace(".", "_")
+    temp_file_path = INDEX_CACHE / f"temp_{safe_url}.html"
+    
+    # Write HTML to temporary file
+    # with open(temp_file_path, "w", encoding="utf-8") as f:
+    #     f.write(html_content)
+    
+    # Calculate hash of content
+    content_hash = hashlib.md5(html_content.encode("utf-8")).hexdigest()
+    
+    # Load existing metadata and cache
+    metadata = json.loads(METADATA_FILE.read_text()) if METADATA_FILE.exists() else []
+    CACHE_META = json.loads(CACHE_FILE.read_text()) if CACHE_FILE.exists() else {}
+    
+    # Check if we've already processed this URL with the same content
+    if url in CACHE_META and CACHE_META[url] == content_hash:
+        mcp_log("SKIP", f"Skipping unchanged URL: {url}")
+        # Clean up temp file
+        # temp_file_path.unlink(missing_ok=True)
+        return 0
+    
+    try:
+        # Process the HTML
+        converter = MarkItDown()
+        # result = converter.convert(str(temp_file_path))
+        result = converter.convert_url(url)
+        markdown = result.text_content
+        
+        # Create chunks of text
+        chunks = list(chunk_text(markdown))
+        
+        # Load or create FAISS index
+        index = faiss.read_index(str(INDEX_FILE)) if INDEX_FILE.exists() and Path(INDEX_FILE).is_file() else None
+        
+        # Process each chunk and create embeddings
+        embeddings = []
+        new_metadata = []
+        
+        for i, chunk in enumerate(tqdm.tqdm(chunks, desc=f"Embedding {url}")):
+            embedding = get_embedding(chunk)
+            embeddings.append(embedding)
+            new_metadata.append({
+                "url": url,
+                "title": title,
+                "chunk": chunk,
+                "chunk_id": f"{safe_url}_{i}"
+            })
+        
+        # If we have embeddings, add them to the index
+        if embeddings:
+            embeddings_array = np.stack(embeddings)
+            
+            if index is None:
+                # Create a new index if none exists
+                dim = len(embeddings[0])
+                index = faiss.IndexFlatL2(dim)
+            
+            # Add embeddings to index
+            index.add(embeddings_array)
+            
+            # Add metadata
+            metadata.extend(new_metadata)
+            
+            # Update cache
+            CACHE_META[url] = content_hash
+            
+            # Save everything
+            METADATA_FILE.write_text(json.dumps(metadata, indent=2))
+            CACHE_FILE.write_text(json.dumps(CACHE_META, indent=2))
+            faiss.write_index(index, str(INDEX_FILE))
+            
+            mcp_log("SUCCESS", f"Indexed {len(chunks)} chunks from {url}")
+        
+        # Clean up temp file
+        # temp_file_path.unlink(missing_ok=True)
+        
+        return len(chunks)
+        
+    except Exception as e:
+        mcp_log("ERROR", f"Failed to process {url}: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        # Clean up temp file
+        temp_file_path.unlink(missing_ok=True)
+        
+        raise e
+
+def search_index(query, k=5):
+    """Search the FAISS index for similar content to the query"""
+    ROOT = Path(__file__).parent.resolve()
+    INDEX_CACHE = ROOT / "faiss_index"
+    INDEX_FILE = INDEX_CACHE / "index.bin"
+    METADATA_FILE = INDEX_CACHE / "metadata.json"
+    
+    if not INDEX_FILE.exists() or not METADATA_FILE.exists():
+        return {"results": [], "error": "No index available. Try adding some pages first."}
+    
+    try:
+        # Load index and metadata
+        index = faiss.read_index(str(INDEX_FILE))
+        metadata = json.loads(METADATA_FILE.read_text())
+        
+        # Get query embedding
+        query_embedding = get_embedding(query)
+        
+        # Reshape for search
+        query_embedding = np.array([query_embedding], dtype=np.float32)
+        
+        # Search
+        distances, indices = index.search(query_embedding, k=k)
+        
+        # Format results
+        results = []
+        for i, idx in enumerate(indices[0]):
+            if idx != -1 and idx < len(metadata):  # Valid index
+                item = metadata[idx]
+                result = {
+                    "score": float(distances[0][i]),
+                    "metadata": item
+                }
+                results.append(result)
+        
+        return {"results": results}
+    
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"results": [], "error": str(e)}
+
+# Add endpoint for searching the index
+@app.post("/api/search")
+async def search_content(request: QueryRequest):
+    query = request.query
+    print(f"Searching for: {query}")
+    
+    try:
+        results = search_index(query)
+        return results
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"results": [], "error": str(e)}
 
 if __name__ == "__main__":
     # Check if running with mcp dev command

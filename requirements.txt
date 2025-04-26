@@ -5,3 +5,7 @@ Pillow
 fastapi
 # pywinauto
 asyncio 
+markitdown[all]
+mcp[cli]
+faiss-cpu
+tqdm
