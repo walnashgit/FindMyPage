@@ -1,6 +1,6 @@
-# Smar Bookmarks Chrome Extension
+# Smart Bookmarks Chrome Extension
 
-A Chrome extension to communicate with the MCP server and interact with its tools.
+A Chrome extension that lets you bookmark any webpage and then search it based on the content
 
 ## Features
 
@@ -19,15 +19,15 @@ A Chrome extension to communicate with the MCP server and interact with its tool
    - Open Chrome and navigate to `chrome://extensions/`
    - Enable "Developer mode" (toggle in the top-right corner)
    - Click "Load unpacked" and select the `chrome-extension` directory
-   - The Smar Bookmarks extension should now be visible in your extensions list
+   - The Smart Bookmarks extension should now be visible in your extensions list
 
 3. **Use the Extension**
-   - Click on the Smar Bookmarks icon in your Chrome toolbar to open the popup
+   - Click on the Smart Bookmarks icon in your Chrome toolbar to open the popup
    
    
    **To Add a Page to Your Index:**
    - Navigate to the web page you want to add
-   - Click on the Smar Bookmarks icon to open the popup
+   - Click on the Smart Bookmarks icon to open the popup
    - Click the "Add Page" button in the top-right corner
    - Wait for the confirmation message
    
@@ -49,3 +49,5 @@ A Chrome extension to communicate with the MCP server and interact with its tool
 - Check the Chrome console for error messages (right-click extension popup → Inspect)
 - Make sure your firewall or security software isn't blocking local connections
 - If search returns no results, try adding some pages first using the "Add Page" button 
+
+[Smart Bookmark Demo](https://youtu.be/wZDLJJB71rw)
