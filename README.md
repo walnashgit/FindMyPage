@@ -18,7 +18,7 @@ The system enables you to build a personal knowledge base of web pages:
 2. These chunks are converted into vector embeddings using nomic-embed-text model running locally in ollama.
 3. The embeddings are stored in a FAISS index for efficient similarity search
 4. The Chrome extension provides a user-friendly interface to add pages and search your index
-5. Search results link directly back to the original web pages
+5. Search results link directly back to the original web pages with search terms automatically highlighted
 
 ## Technical Stack
 
@@ -60,6 +60,7 @@ For details on setting up and using the Chrome extension, see the [Chrome Extens
 │   ├── manifest.json   # Extension configuration
 │   ├── popup.html      # Extension UI
 │   ├── popup.js        # Extension functionality
+│   ├── content-script.js # Handles search term highlighting
 │   └── README.md       # Extension documentation
 └── README.md           # This file
 ```
@@ -70,6 +71,7 @@ For details on setting up and using the Chrome extension, see the [Chrome Extens
 - **Web Page Indexing**: Add any web page to your personal search index
 - **Simple User Interface**: Easy-to-use Chrome extension
 - **Fast Retrieval**: Efficient vector similarity search using FAISS
+- **Search Highlighting**: Automatically highlights search terms in the page when viewing results
 
 ## Development
 
@@ -79,7 +81,7 @@ The MCP server exposes several API endpoints:
 - `/api/search`: Search the FAISS index
 - `/api/add-page`: Add a new web page to the index
 
-[Smart Bookmark Demo](https://youtu.be/wZDLJJB71rw)
+[![Smart Bookmark Demo](https://img.youtube.com/vi/JKx7mAa_bIY/0.jpg)](https://youtu.be/G1thktyJHnQ)
 
 ## License
 

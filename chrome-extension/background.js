@@ -44,4 +44,45 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // Return true to indicate that sendResponse will be called asynchronously
     return true;
   }
+  
+  // Handle opening URLs with search highlighting
+  if (request.action === "openUrlWithHighlight") {
+    const { url, searchTerms } = request;
+    
+    if (!url) {
+      sendResponse({ error: "URL is required" });
+      return;
+    }
+    
+    // Create a URL with search terms parameter
+    let urlToOpen = url;
+    if (searchTerms && searchTerms.trim() !== '') {
+      const separator = url.includes('?') ? '&' : '?';
+      urlToOpen = `${url}${separator}smarthighlight=${encodeURIComponent(searchTerms)}`;
+    }
+    
+    // Open the URL in a new tab
+    chrome.tabs.create({ url: urlToOpen }, (tab) => {
+      // We'll also send a message to the tab to highlight the search terms directly
+      // This is a backup in case the URL parameter approach doesn't work
+      chrome.tabs.onUpdated.addListener(function listener(tabId, changeInfo) {
+        if (tabId === tab.id && changeInfo.status === 'complete') {
+          // Remove this listener
+          chrome.tabs.onUpdated.removeListener(listener);
+          
+          // Send message to content script to highlight terms
+          setTimeout(() => {
+            chrome.tabs.sendMessage(tab.id, {
+              action: 'highlight',
+              searchTerms: searchTerms
+            }).catch(err => console.log("Content script may not be ready yet"));
+          }, 500);
+        }
+      });
+      
+      sendResponse({ success: true, tab: tab.id });
+    });
+    
+    return true;
+  }
 }); 

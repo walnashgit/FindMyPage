@@ -102,7 +102,16 @@ document.addEventListener('DOMContentLoaded', function() {
         element.addEventListener('click', function() {
           const url = this.getAttribute('data-url');
           if (url) {
-            chrome.tabs.create({ url: url });
+            // Send a message to the background script to open the URL with highlighting
+            chrome.runtime.sendMessage({
+              action: 'openUrlWithHighlight',
+              url: url,
+              searchTerms: queryInput.value.trim()
+            }, response => {
+              if (response.error) {
+                console.error('Error opening URL:', response.error);
+              }
+            });
           }
         });
       });

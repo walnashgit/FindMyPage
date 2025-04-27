@@ -6,6 +6,7 @@ A Chrome extension that lets you bookmark any webpage and then search it based o
 
 1. **Page Indexing**: Add web pages to your search index for later retrieval
 2. **Search**: Search through previously indexed web pages
+3. **Search Highlighting**: Automatically highlight search terms when visiting search results
 
 ## Setup Instructions
 
@@ -35,6 +36,18 @@ A Chrome extension that lets you bookmark any webpage and then search it based o
    - Enter your search terms in the text area
    - Click the "Search" button
    - View the search results showing content from previously indexed pages
+   - Click on any result URL to open the page with your search terms automatically highlighted
+
+## Search Highlighting
+
+The extension now includes an automatic search term highlighting feature:
+
+1. When you search for content and click on a result, the page opens in a new tab
+2. Your search terms are automatically highlighted in yellow
+3. The page automatically scrolls to the first occurrence of your search terms
+4. All matching terms throughout the page are highlighted for easy scanning
+
+This makes it much easier to find relevant information within lengthy web pages.
 
 ## Notes
 
@@ -48,6 +61,7 @@ A Chrome extension that lets you bookmark any webpage and then search it based o
 - If you encounter connection errors, ensure the MCP server is running
 - Check the Chrome console for error messages (right-click extension popup → Inspect)
 - Make sure your firewall or security software isn't blocking local connections
-- If search returns no results, try adding some pages first using the "Add Page" button 
+- If search returns no results, try adding some pages first using the "Add Page" button
+- If highlighting doesn't work, make sure you've granted the extension permission to access website content
 
-[Smart Bookmark Demo](https://youtu.be/wZDLJJB71rw)
+[![Smart Bookmark Demo](https://img.youtube.com/vi/JKx7mAa_bIY/0.jpg)](https://youtu.be/G1thktyJHnQ)

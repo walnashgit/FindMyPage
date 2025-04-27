@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Smart Bookmarks",
+  "name": "MCP Agent",
   "version": "1.0",
   "description": "Chrome extension to communicate with MCP server",
   "action": {
@@ -17,9 +17,17 @@
     "tabs"
   ],
   "host_permissions": [
-    "http://127.0.0.1:7172/*"
+    "http://127.0.0.1:7172/*",
+    "<all_urls>"
   ],
   "background": {
     "service_worker": "background.js"
-  }
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content-script.js"],
+      "run_at": "document_end"
+    }
+  ]
 } 
