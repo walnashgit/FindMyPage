@@ -64,4 +64,8 @@ This makes it much easier to find relevant information within lengthy web pages.
 - If search returns no results, try adding some pages first using the "Add Page" button
 - If highlighting doesn't work, make sure you've granted the extension permission to access website content
 
+## Demo
+
+Watch a demo of the Smart Bookmarks in action:
+
 [![Smart Bookmark Demo](https://img.youtube.com/vi/JKx7mAa_bIY/0.jpg)](https://youtu.be/G1thktyJHnQ)

@@ -81,6 +81,10 @@ The MCP server exposes several API endpoints:
 - `/api/search`: Search the FAISS index
 - `/api/add-page`: Add a new web page to the index
 
+## Demo
+
+Watch a demo of the Smart Bookmarks in action:
+
 [![Smart Bookmark Demo](https://img.youtube.com/vi/JKx7mAa_bIY/0.jpg)](https://youtu.be/G1thktyJHnQ)
 
 ## License
